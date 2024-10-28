@@ -18,7 +18,7 @@
 # - https://github.com/numpy/numpy/blob/main/pyproject.toml, and 
 # - https://github.com/numpy/numpy/blob/main/.github/workflows/wheels.yml
 
-ARG base_image=ghcr.io/nvidia/cuda-quantum-devdeps:manylinux-amd64-gcc11-main
+ARG base_image=ghcr.io/nvidia/cuda-quantum-devdeps:manylinux-amd64-cu11-gcc11-main
 FROM $base_image AS wheelbuild
 
 ARG release_version=
@@ -36,6 +36,13 @@ RUN echo "Building MLIR bindings for python${python_version}" && \
     LLVM_PROJECTS='clang;mlir;python-bindings' \
     LLVM_CMAKE_CACHE=/cmake/caches/LLVM.cmake LLVM_SOURCE=/llvm-project \
     bash /scripts/build_llvm.sh -c Release -v 
+
+# Patch the pyproject.toml file to change the CUDA version if needed
+RUN if [ "${CUDA_VERSION#12.}" != "${CUDA_VERSION}" ]; then \
+        sed -i "s/-cu11/-cu12/g" cuda-quantum/pyproject.toml && \
+        sed -i -E "s/(nvidia-cublas-cu[0-9]* ~= )[0-9\.]*/\1${CUDA_VERSION}/g" cuda-quantum/pyproject.toml; \
+        sed -i -E "s/(nvidia-cuda-runtime-cu[0-9]* ~= )[0-9\.]*/\1${CUDA_VERSION}/g" cuda-quantum/pyproject.toml; \
+    fi
 
 # Build the wheel
 RUN echo "Building wheel for python${python_version}." \
@@ -56,16 +63,18 @@ RUN echo "Building wheel for python${python_version}." \
     &&  SETUPTOOLS_SCM_PRETEND_VERSION=${CUDA_QUANTUM_VERSION:-0.0.0} \
         CUDACXX="$CUDA_INSTALL_PREFIX/bin/nvcc" CUDAHOSTCXX=$CXX \
         $python -m build --wheel \
+    && cudaq_major=$(echo ${CUDA_VERSION} | cut -d . -f1) \
+    && $python -m pip install --no-cache-dir auditwheel \
     && LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$(pwd)/_skbuild/lib" \
-        $python -m auditwheel -v repair dist/cuda_quantum-*linux_*.whl \
+        $python -m auditwheel -v repair dist/cuda_quantum*linux_*.whl \
             --exclude libcustatevec.so.1 \
             --exclude libcutensornet.so.2 \
-            --exclude libcublas.so.11 \
-            --exclude libcublasLt.so.11 \
-            --exclude libcusolver.so.11 \
+            --exclude libcublas.so.$cudaq_major \
+            --exclude libcublasLt.so.$cudaq_major \
+            --exclude libcusolver.so.$cudaq_major \
             --exclude libcutensor.so.2 \
             --exclude libnvToolsExt.so.1 \ 
-            --exclude libcudart.so.11.0 \
+            --exclude libcudart.so.$cudaq_major.0 \
             --exclude libnvidia-ml.so.1
 
 FROM scratch
