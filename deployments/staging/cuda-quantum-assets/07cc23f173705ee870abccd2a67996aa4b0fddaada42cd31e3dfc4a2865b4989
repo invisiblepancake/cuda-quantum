@@ -1,0 +1,12 @@
+source-sha: 54778c7d1aa93a8eaca807aead39b33266ea8e21
+cuda-quantum-assets-image: ghcr.io/nvidia/private/cuda-quantum-assets@sha256:07cc23f173705ee870abccd2a67996aa4b0fddaada42cd31e3dfc4a2865b4989
+platform-base-image: amd64/almalinux:8
+openmpi-build-cache: type=registry,ref=ghcr.io/nvidia/private/buildcache-cuda-quantum-assets-openmpi-cu11-8-llvm-amd64:staging-v0.9.0
+platform: linux/amd64
+cuda-version: 11.8
+nvidia-mgpu-repo: cuda-quantum/cuquantum-mgpu.git
+nvidia-mgpu-commit: 5ecebd6b7642e8526baf5930634f2f854aef9ea7
+
+asset-name: installer_amd64_cu11_publishing.txt
+release-id: 11839222157_installer_amd64_cu11_publishing
+artifacts-url: https://api.github.com/repos/NVIDIA/cudaq-private/actions/runs/11835436780/artifacts
