@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -9,6 +9,8 @@
 #include "common/BraketExecutor.h"
 #include "common/BraketServerHelper.h"
 
+#include <aws/braket/model/Association.h>
+#include <aws/braket/model/AssociationType.h>
 #include <aws/braket/model/CreateQuantumTaskRequest.h>
 #include <aws/braket/model/GetQuantumTaskRequest.h>
 #include <aws/braket/model/QuantumTaskStatus.h>
@@ -100,7 +102,8 @@ void tryCreateBucket(Aws::S3Crt::S3CrtClient &client, std::string const &region,
 
 namespace cudaq {
 BraketExecutor::BraketExecutor()
-    : api(options), jobToken(std::getenv("AMZN_BRAKET_JOB_TOKEN")) {}
+    : api(options), jobToken(std::getenv("AMZN_BRAKET_JOB_TOKEN")),
+      reservationArn(std::getenv("AMZN_BRAKET_RESERVATION_TIME_WINDOW_ARN")) {}
 
 /// @brief Set the server helper
 void BraketExecutor::setServerHelper(ServerHelper *helper) {
@@ -109,6 +112,16 @@ void BraketExecutor::setServerHelper(ServerHelper *helper) {
   std::string region =
       Aws::Utils::ARN(helper->getConfig().at("deviceArn")).GetRegion();
   std::string defaultBucket = helper->getConfig().at("defaultBucket");
+
+  if (helper->getConfig().contains("polling_interval_ms")) {
+    long pollingIntervalMs{
+        std::stol(helper->getConfig().at("polling_interval_ms"))};
+    if (pollingIntervalMs <= 0) {
+      throw std::runtime_error(
+          "polling_interval_ms must be a positive integer.");
+    }
+    pollingInterval = std::chrono::milliseconds{pollingIntervalMs};
+  }
 
   Aws::Client::ClientConfiguration clientConfig;
   clientConfig.verifySSL = false;
@@ -160,8 +173,21 @@ ServerJobPayload BraketExecutor::checkHelperAndCreateJob(
   return braketServerHelper->createJob(codesToExecute);
 }
 
+void BraketExecutor::setOutputNames(const KernelExecution &codeToExecute,
+                                    const std::string &taskId) {
+  auto braketServerHelper = dynamic_cast<BraketServerHelper *>(serverHelper);
+  assert(braketServerHelper);
+  auto config = braketServerHelper->getConfig();
+
+  auto output_names = codeToExecute.output_names.dump();
+  config["output_names." + taskId] = output_names;
+
+  braketServerHelper->setOutputNames(taskId, output_names);
+}
+
 details::future
-BraketExecutor::execute(std::vector<KernelExecution> &codesToExecute) {
+BraketExecutor::execute(std::vector<KernelExecution> &codesToExecute,
+                        bool isObserve) {
   auto [dummy1, dummy2, messages] = checkHelperAndCreateJob(codesToExecute);
 
   std::string const defaultBucket = defaultBucketFuture.get();
@@ -177,6 +203,15 @@ BraketExecutor::execute(std::vector<KernelExecution> &codesToExecute) {
     req.SetShots(message["shots"]);
     if (jobToken)
       req.SetJobToken(jobToken);
+
+    if (reservationArn) {
+      Aws::Braket::Model::Association assoc;
+      assoc.SetArn(reservationArn);
+      assoc.SetType(
+          Aws::Braket::Model::AssociationType::RESERVATION_TIME_WINDOW_ARN);
+      req.AddAssociations(std::move(assoc));
+    }
+
     req.SetOutputS3Bucket(defaultBucket);
     req.SetOutputS3KeyPrefix(defaultPrefix);
 
@@ -185,16 +220,19 @@ BraketExecutor::execute(std::vector<KernelExecution> &codesToExecute) {
 
   return std::async(
       std::launch::async,
-      [this](std::vector<Aws::Braket::Model::CreateQuantumTaskOutcomeCallable>
-                 createOutcomes) {
+      [this, codesToExecute, isObserve](
+          std::vector<Aws::Braket::Model::CreateQuantumTaskOutcomeCallable>
+              createOutcomes) {
         std::vector<ExecutionResult> results;
-        for (auto &outcome : createOutcomes) {
+        for (std::size_t i = 0; auto &outcome : createOutcomes) {
           auto createResponse = outcome.get();
           if (!createResponse.IsSuccess()) {
             throw std::runtime_error(createResponse.GetError().GetMessage());
           }
           std::string taskArn = createResponse.GetResult().GetQuantumTaskArn();
+
           cudaq::info("Created Braket quantum task {}", taskArn);
+          setOutputNames(codesToExecute[i], taskArn);
 
           Aws::Braket::Model::GetQuantumTaskRequest req;
           req.SetQuantumTaskArn(taskArn);
@@ -240,12 +278,21 @@ BraketExecutor::execute(std::vector<KernelExecution> &codesToExecute) {
           }
           auto resultsJson = nlohmann::json::parse(
               s3Response.GetResultWithOwnership().GetBody());
+
           auto c = serverHelper->processResults(resultsJson, taskArn);
 
-          for (auto &regName : c.register_names()) {
-            results.emplace_back(c.to_map(regName), regName);
-            results.back().sequentialData = c.sequential_data(regName);
+          if (isObserve) {
+            // Use the job name instead of the global register.
+            results.emplace_back(c.to_map(), codesToExecute[i].name);
+            results.back().sequentialData = c.sequential_data();
+          } else {
+            // For each register, add the results into result.
+            for (auto &regName : c.register_names()) {
+              results.emplace_back(c.to_map(regName), regName);
+              results.back().sequentialData = c.sequential_data(regName);
+            }
           }
+          i++;
         }
 
         return sample_result(results);

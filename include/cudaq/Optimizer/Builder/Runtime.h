@@ -1,5 +1,5 @@
 /****************************************************************-*- C++ -*-****
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -59,7 +59,7 @@ static constexpr const char CudaqRegisterKernelName[] =
     "cudaqRegisterKernelName";
 
 /// Prefix for an analog kernel entry functions.
-static constexpr const char cudaqAHSPrefixName[] =
+static constexpr const char cudaqAHKPrefixName[] =
     "__analog_hamiltonian_kernel__";
 
 // Host-side helper functions for working with `cudaq::pauli_word` or a

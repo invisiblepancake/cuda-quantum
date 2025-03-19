@@ -96,6 +96,55 @@ You can then launch the container and connect to it via SSH by executing the fol
     docker exec -d cuda-quantum bash -c "sudo -E /usr/sbin/sshd -D"
     ssh cudaq@localhost -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null
 
+.. _known_blackwell_issues:
+
+Known Blackwell Issues
+++++++++++++++++++++++++++++++++++++
+
+There are some known Blackwell issues when using CUDA-Q.
+
+.. _blackwell-cuda-dependencies:
+
+.. note::
+
+    If you are using CUDA 12.8 on Blackwell, you may need to install additional
+    dependencies to use the python wheels.
+
+    If you see the following error:
+
+    .. code-block:: console
+
+       cupy_backends.cuda.api.driver.CUDADriverError: CUDA_ERROR_NO_BINARY_FOR_GPU: no kernel image is available for execution on the device
+
+    You may need to install the more updated python wheels.
+
+    .. code-block:: console
+
+        pip install nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cuda-nvrtc-cu12 nvidia-nvjitlink-cu12 nvidia-curand-cu12
+
+.. _blackwell-torch-dependences:
+
+.. note::
+
+    If you are attempting to use torch integrators on Blackwell, you will need to install the nightly torch version.
+
+    .. code-block:: console
+
+        python3 -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+
+    With this new version of torch, you may see:
+
+    .. code-block:: console
+
+        Module 'torch' was found, but when imported by pytest it raised:
+        ImportError('/home/cudaq/.local/lib/python3.10/site-packages/torch/lib/../../nvidia/cusparse/lib/libcusparse.so.12: undefined symbol: __nvJitLinkCreate_12_8, version libnvJitLink.so.12')
+
+    This may be caused by an incorrectly linked shared object. If you encounter this, try adding the shared object to the LD_LIBRARY_PATH:
+
+    .. code-block:: console
+
+        export LD_LIBRARY_PATH=$(pip show nvidia-nvjitlink-cu12 | sed -nE 's/Location: (.*)$/\1/p')/nvidia/nvjitlink/lib:$LD_LIBRARY_PATH
+
 
 .. _install-singularity-image:
 
@@ -183,8 +232,8 @@ please take a look at the section on :ref:`Development with VS Code <singularity
 Python wheels
 ++++++++++++++++++++++++++++++++++++
 
-CUDA-Q Python wheels are available on `PyPI.org <https://pypi.org/project/cuda-quantum>`__. 
-Installation instructions can be found in the `project description <https://pypi.org/project/cuda-quantum/#description>`__.
+CUDA-Q Python wheels are available on `PyPI.org <https://pypi.org/project/cudaq/>`__. 
+Installation instructions can be found in the `project description <https://pypi.org/project/cudaq/#description>`__.
 For more information about available versions and documentation,
 see :doc:`../../releases`.
 
@@ -218,7 +267,7 @@ Pre-built binaries
 Starting with the 0.6.0 release, we provide pre-built binaries for using 
 CUDA-Q with C++. Support for using CUDA-Q with Python can be installed 
 side-by-side with the pre-built binaries for C++ by following the instructions on 
-`PyPI.org <https://pypi.org/project/cuda-quantum>`__.
+`PyPI.org <https://pypi.org/project/cudaq/>`__.
 The pre-built binaries work across a range of Linux operating systems listed 
 under :ref:`dependencies-and-compatibility`. 
 
@@ -659,7 +708,7 @@ certain CUDA libraries separately to take advantage of these.
 Installation via PyPI
 ++++++++++++++++++++++++++++++++++++
 
-If you installed CUDA-Q via `PyPI <https://pypi.org/project/cuda-quantum>`__, please follow the installation instructions there to install the necessary CUDA dependencies.
+If you installed CUDA-Q via `PyPI <https://pypi.org/project/cudaq/>`__, please follow the installation instructions there to install the necessary CUDA dependencies.
 
 Installation In Container Images
 ++++++++++++++++++++++++++++++++++++

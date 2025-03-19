@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -51,6 +51,14 @@ quantum_platform *getQuantumPlatformInternal() {
 void quantum_platform::set_noise(const noise_model *model) {
   auto &platformQPU = platformQPUs[platformCurrentQPU];
   platformQPU->setNoiseModel(model);
+}
+
+const noise_model *quantum_platform::get_noise() {
+  if (executionContext)
+    return executionContext->noiseModel;
+
+  auto &platformQPU = platformQPUs[platformCurrentQPU];
+  return platformQPU->getNoiseModel();
 }
 
 void quantum_platform::reset_noise() { set_noise(nullptr); }
@@ -126,6 +134,11 @@ bool quantum_platform::is_emulated(const std::size_t qpu_id) const {
 bool quantum_platform::supports_conditional_feedback(
     const std::size_t qpu_id) const {
   return platformQPUs[qpu_id]->supportsConditionalFeedback();
+}
+
+bool quantum_platform::supports_explicit_measurements(
+    const std::size_t qpu_id) const {
+  return platformQPUs[qpu_id]->supportsExplicitMeasurements();
 }
 
 void quantum_platform::launchVQE(const std::string kernelName,

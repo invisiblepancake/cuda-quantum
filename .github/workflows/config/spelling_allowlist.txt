@@ -29,6 +29,7 @@ DOI
 Deuteron
 Doxygen
 FPGAs
+Fock
 Fortran
 Fourier
 GHCR
@@ -44,6 +45,8 @@ Hadamards
 Hamiltonian
 Hamiltonians
 IQM
+InfiniBand
+Infleqtion
 IonQ
 JIT
 JSON
@@ -60,6 +63,7 @@ MPI
 MPICH
 MPS
 MSB
+Mandel
 Max-Cut
 MyST
 NGC
@@ -75,14 +79,19 @@ OpenMPI
 OpenQASM
 OpenSSL
 OpenSUSE
+Ou
 POSIX
 PSIRT
+Pasqal
 Pauli
 Paulis
+Photonic
+Photonics
 PyPI
 Pygments
 QAOA
 QCaaS
+QEC
 QIR
 QIS
 QPP
@@ -91,6 +100,7 @@ QPUs
 QPU’s
 QTX
 Qiskit
+QuEra
 QuTiP
 Quake
 Quantinuum
@@ -102,7 +112,10 @@ SLED
 SLES
 SLURM
 SVD
+Sqale
+Stim
 Superpositions
+Superstaq
 TBI
 TCP
 TableGen
@@ -130,9 +143,11 @@ backends
 bitcode
 bitstring
 bitstrings
+bmatrix
 bool
 boolean
 boson
+bosonic
 broadcasted
 buildable
 callable
@@ -162,6 +177,7 @@ cuQuantum
 cuTensor
 cudaq
 dataflow
+ddots
 deallocate
 deallocated
 deallocates
@@ -172,11 +188,13 @@ decrementing
 dendrogram
 deserialize
 destructor
+detuning
 dimensionality
 discoverable
 discretization
 discretize
 discretized
+eigenbasis
 eigensolver
 eigensolvers
 eigenstate
@@ -186,6 +204,7 @@ eigenvalues
 eigenvector
 eigenvectors
 endian
+endianness
 enqueue
 enqueues
 enqueuing
@@ -215,6 +234,8 @@ inlined
 inlining
 instantiation
 instantiations
+integrator
+integrators
 interferometer
 interoperational
 intrinsics
@@ -246,6 +267,7 @@ parallelizing
 parameterization
 performant
 photonic
+photonics
 precompute
 precomputed
 prepend
@@ -301,6 +323,7 @@ templated
 toolchain
 toolchains
 toolset
+transmon
 trotterization
 unary
 uncomputation
@@ -312,7 +335,9 @@ unoptimized
 upvote
 variadic
 variational
+vdots
 verifier
 vertices
+waveforms
 wavefunction
 workflow

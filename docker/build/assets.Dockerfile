@@ -1,5 +1,5 @@
 # ============================================================================ #
-# Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                   #
+# Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                   #
 # All rights reserved.                                                         #
 #                                                                              #
 # This source code and the accompanying materials are made available under     #
@@ -150,7 +150,7 @@ RUN source /cuda-quantum/scripts/configure_build.sh && \
         libname="$(basename "$binary")" && \
         # Linking cublas dynamically necessarily adds a libgcc_s dependency to the GPU-based simulators.
         # The same holds for a range of CUDA libraries, whereas libcudart.so does not have any GCC dependencies.
-        if [ "${libname#libnvqir-custatevec}" != "$libname" ] || [ "${libname#libnvqir-tensornet}" != "$libname" ]; then \
+        if [ "${libname#libnvqir-custatevec}" != "$libname" ] || [ "${libname#libnvqir-tensornet}" != "$libname" ] || [ "${libname#libnvqir-dynamics}" != "$libname" ]; then \
             echo "Skipping validation of $libname."; \
         elif [ -n "$(ldd "${binary}" 2>/dev/null | grep gcc)" ]; then \
             has_gcc_dependencies=true && \
@@ -191,6 +191,7 @@ RUN cd /cuda-quantum && source scripts/configure_build.sh && \
         cublas_version=11.11 && \
         sed -i "s/-cu12/-cu11/g" pyproject.toml && \
         sed -i -E "s/(nvidia-cublas-cu[0-9]* ~= )[0-9\.]*/\1${cublas_version}/g" pyproject.toml && \
+        sed -i -E "s/(nvidia-cuda-nvrtc-cu[0-9]* ~= )[0-9\.]*/\1${CUDA_VERSION}/g" pyproject.toml && \
         sed -i -E "s/(nvidia-cuda-runtime-cu[0-9]* ~= )[0-9\.]*/\1${CUDA_VERSION}/g" pyproject.toml; \
     fi && \
     # Needed to retrigger the LLVM build, since the MLIR Python bindings
@@ -223,13 +224,15 @@ RUN echo "Patching up wheel using auditwheel..." && \
         --plat ${MANYLINUX_PLATFORM} \
         --exclude libcublas.so.11 \
         --exclude libcublasLt.so.11 \
+        --exclude libcurand.so.10 \
         --exclude libcusolver.so.11 \
         --exclude libcutensor.so.2 \
         --exclude libcutensornet.so.2 \
         --exclude libcustatevec.so.1 \
         --exclude libcudart.so.11.0 \
         --exclude libnvToolsExt.so.1 \
-        --exclude libnvidia-ml.so.1
+        --exclude libnvidia-ml.so.1 \
+        --exclude libcuda.so.1
     ## [<CUDAQuantumWheel]
 
 # Validate that the nvidia backend was built.
@@ -260,7 +263,7 @@ RUN gcc_packages=$(dnf list installed "gcc*" | sed '/Installed Packages/d' | cut
 
 ## [Python MLIR tests]
 RUN cd /cuda-quantum && source scripts/configure_build.sh && \
-    python3 -m pip install lit pytest && \
+    python3 -m pip install lit pytest scipy cuquantum-python-cu$(echo ${CUDA_VERSION} | cut -d . -f1)~=25.03 && \
     "${LLVM_INSTALL_PREFIX}/bin/llvm-lit" -v _skbuild/python/tests/mlir \
         --param nvqpp_site_config=_skbuild/python/tests/mlir/lit.site.cfg.py
 # The other tests for the Python wheel are run post-installation.
@@ -320,7 +323,8 @@ RUN . /cuda-quantum/scripts/configure_build.sh install-gcc && \
     dnf install -y --nobest --setopt=install_weak_deps=False \
         cuda-compiler-$(echo ${CUDA_VERSION} | tr . -) \
         cuda-cudart-devel-$(echo ${CUDA_VERSION} | tr . -) \
-        libcublas-devel-$(echo ${CUDA_VERSION} | tr . -) && \
+        libcublas-devel-$(echo ${CUDA_VERSION} | tr . -) \
+        libcurand-devel-$(echo ${CUDA_VERSION} | tr . -) && \
     if [ $(echo $CUDA_VERSION | cut -d "." -f1) -ge 12 ]; then \
         dnf install -y --nobest --setopt=install_weak_deps=False \
             libnvjitlink-$(echo ${CUDA_VERSION} | tr . -); \

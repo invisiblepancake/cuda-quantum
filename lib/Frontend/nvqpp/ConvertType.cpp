@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -242,10 +242,21 @@ bool QuakeBridgeVisitor::VisitRecordDecl(clang::RecordDecl *x) {
   SmallVector<Type> fieldTys =
       lastTypes(std::distance(x->field_begin(), x->field_end()));
   auto [width, alignInBytes] = getWidthAndAlignment(x);
+
+  // This is a struq if it is not empty and all members are quantum references.
   bool isStruq = !fieldTys.empty();
-  for (auto ty : fieldTys)
+  bool quantumMembers = false;
+  for (auto ty : fieldTys) {
+    if (quake::isQuantumType(ty))
+      quantumMembers = true;
     if (!quake::isQuantumReferenceType(ty))
       isStruq = false;
+  }
+  if (quantumMembers && !isStruq) {
+    reportClangError(x, mangler,
+                     "hybrid quantum-classical struct types are not allowed");
+    return false;
+  }
 
   auto ty = [&]() -> Type {
     if (isStruq)
@@ -262,22 +273,18 @@ bool QuakeBridgeVisitor::VisitRecordDecl(clang::RecordDecl *x) {
     // -- does it contain invalid C++ types?
     for (auto *field : x->fields()) {
       auto *ty = field->getType().getTypePtr();
-      bool isRef = false;
       if (ty->isLValueReferenceType()) {
         auto *lref = cast<clang::LValueReferenceType>(ty);
-        isRef = true;
         ty = lref->getPointeeType().getTypePtr();
       }
       if (auto *tyDecl = ty->getAsRecordDecl()) {
         if (auto *ident = tyDecl->getIdentifier()) {
           auto name = ident->getName();
           if (isInNamespace(tyDecl, "cudaq")) {
-            if (isRef) {
-              // can be owning container; so can be qubit, qarray, or qvector
-              if ((name.equals("qudit") || name.equals("qubit") ||
-                   name.equals("qvector") || name.equals("qarray")))
-                continue;
-            }
+            //  can be owning container; so can be qubit, qarray, or qvector
+            if ((name.equals("qudit") || name.equals("qubit") ||
+                 name.equals("qvector") || name.equals("qarray")))
+              continue;
             // must be qview or qview&
             if (name.equals("qview"))
               continue;
@@ -442,7 +449,7 @@ bool QuakeBridgeVisitor::VisitLValueReferenceType(
     return pushType(cc::PointerType::get(builder.getContext()));
   auto eleTy = popType();
   if (isa<cc::CallableType, cc::IndirectCallableType, cc::SpanLikeType,
-          quake::VeqType, quake::RefType>(eleTy))
+          quake::VeqType, quake::RefType, quake::StruqType>(eleTy))
     return pushType(eleTy);
   return pushType(cc::PointerType::get(eleTy));
 }
@@ -455,14 +462,23 @@ bool QuakeBridgeVisitor::VisitRValueReferenceType(
   // FIXME: LLVMStructType is promoted as a temporary workaround.
   if (isa<cc::ArrayType, cc::CallableType, cc::IndirectCallableType,
           cc::SpanLikeType, cc::StructType, quake::VeqType, quake::RefType,
-          LLVM::LLVMStructType>(eleTy))
+          quake::StruqType, LLVM::LLVMStructType>(eleTy))
     return pushType(eleTy);
   return pushType(cc::PointerType::get(eleTy));
 }
 
 bool QuakeBridgeVisitor::VisitConstantArrayType(clang::ConstantArrayType *t) {
   auto size = t->getSize().getZExtValue();
-  return pushType(cc::ArrayType::get(builder.getContext(), popType(), size));
+  auto ty = popType();
+  if (quake::isQuantumType(ty)) {
+    auto *ctx = builder.getContext();
+    if (ty == quake::RefType::get(ctx))
+      return pushType(quake::VeqType::getUnsized(ctx));
+    emitFatalError(builder.getUnknownLoc(),
+                   "array element type is not supported");
+    return false;
+  }
+  return pushType(cc::ArrayType::get(builder.getContext(), ty, size));
 }
 
 bool QuakeBridgeVisitor::pushType(Type t) {
@@ -495,7 +511,7 @@ SmallVector<Type> QuakeBridgeVisitor::lastTypes(unsigned n) {
 
 static bool isReferenceToCudaqStateType(Type t) {
   if (auto ptrTy = dyn_cast<cc::PointerType>(t))
-    return isa<cc::StateType>(ptrTy.getElementType());
+    return isa<quake::StateType>(ptrTy.getElementType());
   return false;
 }
 

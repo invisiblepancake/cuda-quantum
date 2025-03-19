@@ -1,5 +1,5 @@
 # ============================================================================ #
-# Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                   #
+# Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                   #
 # All rights reserved.                                                         #
 #                                                                              #
 # This source code and the accompanying materials are made available under     #
@@ -43,15 +43,19 @@ RUN sed -i "s/README.md.in/README.md/g" cuda-quantum/pyproject.toml && \
         cublas_version=11.11 && \
         sed -i "s/-cu12/-cu11/g" cuda-quantum/pyproject.toml && \
         sed -i -E "s/(nvidia-cublas-cu[0-9]* ~= )[0-9\.]*/\1${cublas_version}/g" cuda-quantum/pyproject.toml && \
+        sed -i -E "s/(nvidia-cuda-nvrtc-cu[0-9]* ~= )[0-9\.]*/\1${CUDA_VERSION}/g" cuda-quantum/pyproject.toml && \
         sed -i -E "s/(nvidia-cuda-runtime-cu[0-9]* ~= )[0-9\.]*/\1${CUDA_VERSION}/g" cuda-quantum/pyproject.toml; \
     fi
 
 # Create the README
 RUN cd cuda-quantum && cat python/README.md.in > python/README.md && \
     package_name=cuda-quantum-cu$(echo ${CUDA_VERSION} | cut -d . -f1) && \
-    cuda_version_requirement=">= ${CUDA_VERSION}" && \
+    cuda_version_requirement="\>= ${CUDA_VERSION}" && \
     cuda_version_conda=${CUDA_VERSION}.0 && \
-    for variable in package_name cuda_version_requirement cuda_version_conda; do \
+    if [ "${CUDA_VERSION#11.}" != "${CUDA_VERSION}" ]; then \
+        deprecation_notice="**Note**: Support for CUDA 11 will be removed in future releases. Please update to CUDA 12."; \
+    fi && \
+    for variable in package_name cuda_version_requirement cuda_version_conda deprecation_notice; do \
         sed -i "s/.{{[ ]*$variable[ ]*}}/${!variable}/g" python/README.md; \
     done && \
     if [ -n "$(cat python/README.md | grep -e '.{{.*}}')" ]; then \
@@ -66,10 +70,6 @@ RUN echo "Building wheel for python${python_version}." \
     # Find any external NVQIR simulator assets to be pulled in during wheel packaging.
     && export CUDAQ_EXTERNAL_NVQIR_SIMS=$(bash scripts/find_wheel_assets.sh assets) \
     && export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$(pwd)/assets" \
-    && export CUQUANTUM_INSTALL_PREFIX=/usr/local/cuquantum \
-    && export CUTENSOR_INSTALL_PREFIX=/usr/local/cutensor \
-    && bash scripts/configure_build.sh install-cuquantum \
-    && bash scripts/configure_build.sh install-cutensor \
     &&  SETUPTOOLS_SCM_PRETEND_VERSION=${CUDA_QUANTUM_VERSION:-0.0.0} \
         CUDACXX="$CUDA_INSTALL_PREFIX/bin/nvcc" CUDAHOSTCXX=$CXX \
         $python -m build --wheel \
@@ -82,11 +82,13 @@ RUN echo "Building wheel for python${python_version}." \
             --exclude libcutensornet.so.2 \
             --exclude libcublas.so.$cudaq_major \
             --exclude libcublasLt.so.$cudaq_major \
+            --exclude libcurand.so.10 \
             --exclude libcusolver.so.$cudaq_major \
             --exclude libcutensor.so.2 \
             --exclude libnvToolsExt.so.1 \ 
             --exclude libcudart.so.$cudart_libsuffix \
-            --exclude libnvidia-ml.so.1
+            --exclude libnvidia-ml.so.1 \
+            --exclude libcuda.so.1
 
 FROM scratch
 COPY --from=wheelbuild /cuda-quantum/wheelhouse/*manylinux*.whl . 

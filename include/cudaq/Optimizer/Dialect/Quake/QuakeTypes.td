@@ -1,5 +1,5 @@
 /***********************************************************-*- tablegen -*-****
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -150,13 +150,15 @@ def VeqType : QuakeType<"Veq", "veq"> {
 
   let parameters = (ins "std::size_t":$size);
 
-  let genVerifyDecl = 1;
   let hasCustomAssemblyFormat = 1;
   
   let extraClassDeclaration = [{
-    bool hasSpecifiedSize() const { return getSize(); }
+    static constexpr std::size_t kDynamicSize =
+      std::numeric_limits<std::size_t>::max();
+
+    bool hasSpecifiedSize() const { return getSize() != kDynamicSize; }
     static VeqType getUnsized(mlir::MLIRContext *ctx) {
-      return VeqType::get(ctx, 0);
+      return VeqType::get(ctx, kDynamicSize);
     }
   }];
 }
@@ -177,8 +179,10 @@ def StruqType : QuakeType<"Struq", "struq"> {
 
   let parameters = (ins
     "mlir::StringAttr":$name,
+    // members must be NonStruqRefType.
     ArrayRefParameter<"mlir::Type">:$members
   );
+
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
@@ -217,6 +221,28 @@ def MeasureType : QuakeType<"Measure", "measure"> {
   let genStorageClass = 0;
 }
 
+//===----------------------------------------------------------------------===//
+// StateType
+//===----------------------------------------------------------------------===//
+
+def quake_StateType : QuakeType<"State", "state"> {
+  let summary = "Proxy for the cudaq::state class.";
+  let description = [{
+    The cudaq::state class is an abstraction for any data that may be used to
+    describe the initial state of a set of qubits. It would typically be used
+    in a simulation environment.
+
+    The CUDA-Q runtime will implement an ABI of intrinsic functions for the
+    compiler generated code to interface with this information in a generic
+    manner.
+
+    There are no legal operations in Quake/CC on a value of type `!quake.state`.
+    Only pointers to such values should exist in the IR for the purposes of
+    passing references to state objects to runtime functions at codegen.
+  }];
+  let genStorageClass = 0;
+}
+
 def AnyQTypeLike : TypeConstraint<Or<[WireType.predicate, VeqType.predicate,
         ControlType.predicate, RefType.predicate, StruqType.predicate]>,
         "quake quantum types">;
@@ -244,5 +270,14 @@ class StdvecOf<list<Type> allowedTypes> : Type<
         "; }($_self.cast<::cudaq::cc::StdvecType>().getElementType())">]>,
     "stdvec of " # AnyTypeOf<allowedTypes>.summary # " values",
     "::cudaq::cc::StdvecType">;
+
+def IsPointerTypePred : CPred<"$_self.isa<::cudaq::cc::PointerType>()">;
+
+class PointerOf<list<Type> allowedTypes> : Type<
+    And<[IsPointerTypePred, Concat<"[](::mlir::Type elementType) { return ",
+      SubstLeaves<"$_self", "elementType", AnyTypeOf<allowedTypes>.predicate>,
+        "; }($_self.cast<::cudaq::cc::PointerType>().getElementType())">]>,
+    "pointer of " # AnyTypeOf<allowedTypes>.summary # " values",
+    "::cudaq::cc::PointerType">;
 
 #endif // CUDAQ_OPTIMIZER_DIALECT_QUAKE_TYPES

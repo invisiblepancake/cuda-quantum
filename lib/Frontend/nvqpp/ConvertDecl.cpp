@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -158,7 +158,7 @@ bool QuakeBridgeVisitor::interceptRecordDecl(clang::RecordDecl *x) {
     if (name.equals("qvector") || name.equals("qview"))
       return pushType(quake::VeqType::getUnsized(ctx));
     if (name.equals("state"))
-      return pushType(cc::StateType::get(ctx));
+      return pushType(quake::StateType::get(ctx));
     if (name.equals("pauli_word"))
       return pushType(cc::CharspanType::get(ctx));
     if (name.equals("qkernel")) {
@@ -169,8 +169,10 @@ bool QuakeBridgeVisitor::interceptRecordDecl(clang::RecordDecl *x) {
       auto fnTy = cast<FunctionType>(popType());
       return pushType(cc::IndirectCallableType::get(fnTy));
     }
-    auto loc = toLocation(x);
-    TODO_loc(loc, "unhandled type, " + name + ", in cudaq namespace");
+    if (!isInNamespace(x, "solvers") && !isInNamespace(x, "qec")) {
+      auto loc = toLocation(x);
+      TODO_loc(loc, "unhandled type, " + name + ", in cudaq namespace");
+    }
   }
   if (isInNamespace(x, "std")) {
     if (name.equals("vector")) {
@@ -178,7 +180,15 @@ bool QuakeBridgeVisitor::interceptRecordDecl(clang::RecordDecl *x) {
       // Traverse template argument 0 to get the vector's element type.
       if (!cts || !TraverseType(cts->getTemplateArgs()[0].getAsType()))
         return false;
-      return pushType(cc::StdvecType::get(ctx, popType()));
+      auto ty = popType();
+      if (quake::isQuantumType(ty)) {
+        if (ty == quake::RefType::get(ctx))
+          return pushType(quake::VeqType::getUnsized(ctx));
+        cudaq::emitFatalError(toLocation(x->getSourceRange()),
+                              "std::vector element type is not supported");
+        return false;
+      }
+      return pushType(cc::StdvecType::get(ctx, ty));
     }
     // std::vector<bool>   =>   cc.stdvec<i1>
     if (name.equals("_Bit_reference") || name.equals("__bit_reference")) {

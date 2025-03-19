@@ -31,17 +31,18 @@ requirements are listed in the Installation Guide of the linked documentation.
 
 CUDA-Q does not require a GPU to use, but some components are GPU-accelerated.
 
-Getting started with CUDA-Q on `x86_64` platforms simply requires `pip install
-${{ package_name }}`. Please make sure your `pip` version is >= 24.0.
+Getting started with CUDA-Q simply requires `pip install
+${{ package_name }}`. Please make sure your `pip` version is \>= 24.0.
 If you have an NVIDIA GPU on your host system, you will be
 able to use it without any further installation steps.
+
+${{ deprecation_notice }}
 
 > **Important:** 
 > Please check if you have an existing installation of the `cuda-quantum`, `cudaq-quantum-cu11`, or `cuda-quantum-cu12` package, and uninstall it prior to installation. Different CUDA-Q binary distributions may conflict with each other causing issues.
 
 
-If you want to perform multi-GPU simulations, or if you are using
-`aarch64`/`arm64` processors, additional components must be installed. We
+If you want to perform multi-GPU simulations, additional components must be installed. We
 recommend using [Conda](https://docs.conda.io/en/latest/) to do so. If you are
 not already using Conda, you can install a minimal version following the
 instructions [here](https://docs.anaconda.com/miniconda/). The following
@@ -54,7 +55,7 @@ dependencies:
 cuda_version=${{ cuda_version_conda }} # set this variable to version ${{ cuda_version_requirement }}
 conda create -y -n cudaq-env python=3.11 pip
 conda install -y -n cudaq-env -c "nvidia/label/cuda-${cuda_version}" cuda
-conda install -y -n cudaq-env -c conda-forge mpi4py openmpi cxx-compiler
+conda install -y -n cudaq-env -c conda-forge mpi4py openmpi">=5.0.3" cxx-compiler
 conda env config vars set -n cudaq-env LD_LIBRARY_PATH="$CONDA_PREFIX/envs/cudaq-env/lib:$LD_LIBRARY_PATH"
 conda env config vars set -n cudaq-env MPI_PATH=$CONDA_PREFIX/envs/cudaq-env
 conda activate cudaq-env

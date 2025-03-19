@@ -1,5 +1,5 @@
 /****************************************************************-*- C++ -*-****
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -147,6 +147,11 @@ public:
   /// Return `failure()` when \p name is not in the table of known intrinsics.
   mlir::LogicalResult loadIntrinsic(mlir::ModuleOp module,
                                     llvm::StringRef name);
+
+  llvm::StringRef getIntrinsicText(llvm::StringRef name);
+  mlir::LogicalResult loadIntrinsicWithAliases(mlir::ModuleOp module,
+                                               llvm::StringRef name,
+                                               llvm::StringRef prefix);
 
   std::string hashStringByContent(llvm::StringRef sref);
 

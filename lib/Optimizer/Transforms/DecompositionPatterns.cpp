@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -336,34 +336,84 @@ struct ExpPauliDecomposition : public OpRewritePattern<quake::ExpPauliOp> {
                                 PatternRewriter &rewriter) const override {
     auto loc = expPauliOp.getLoc();
     auto module = expPauliOp->getParentOfType<ModuleOp>();
-    auto qubits = expPauliOp.getQubits();
+    auto qubits = expPauliOp.getTarget();
     auto theta = expPauliOp.getParameter();
     auto pauliWord = expPauliOp.getPauli();
+    auto stringTy = pauliWord.getType();
+    std::string pauliWordString;
+
+    if (expPauliOp.isAdj())
+      theta = rewriter.create<arith::NegFOp>(loc, theta);
 
     std::optional<StringRef> optPauliWordStr;
-    if (auto defOp =
-            pauliWord.getDefiningOp<cudaq::cc::CreateStringLiteralOp>()) {
-      optPauliWordStr = defOp.getStringLiteral();
+
+    if (isa<cudaq::cc::PointerType>(stringTy)) {
+      if (auto defOp =
+              pauliWord.getDefiningOp<cudaq::cc::CreateStringLiteralOp>())
+        optPauliWordStr = defOp.getStringLiteral();
     } else {
-      // Get the pauli word string from a constant global string generated
-      // during argument synthesis.
-      auto stringOp = expPauliOp.getOperand(2);
-      auto stringTy = stringOp.getType();
       if (auto charSpanTy = dyn_cast<cudaq::cc::CharspanType>(stringTy)) {
-        if (auto vecInit = stringOp.getDefiningOp<cudaq::cc::StdvecInitOp>()) {
+        if (auto load = pauliWord.getDefiningOp<cudaq::cc::LoadOp>()) {
+          // Look for a matching StoreOp for the LoadOp. This search isn't
+          // necessarily efficient or exhaustive. Instead of using dominance
+          // information, we scan the current basic block looking for the
+          // nearest StoreOp before the LoadOp. If one is found, we forward the
+          // stored value.
+          auto ptrVal = load.getPtrvalue();
+          auto storeVal = [&]() -> Value {
+            SmallVector<Operation *> stores;
+            for (auto *use : ptrVal.getUsers()) {
+              if (auto store = dyn_cast<cudaq::cc::StoreOp>(use)) {
+                if (store.getPtrvalue() == ptrVal &&
+                    store->getBlock() == load->getBlock())
+                  stores.push_back(store.getOperation());
+              }
+            }
+            if (stores.empty())
+              return {};
+            for (Operation *op = load.getOperation()->getPrevNode(); op;
+                 op = op->getPrevNode()) {
+              auto iter = std::find(stores.begin(), stores.end(), op);
+              if (iter == stores.end())
+                continue;
+              return cast<cudaq::cc::StoreOp>(*iter).getValue();
+            }
+            return {};
+          }();
+          if (storeVal)
+            pauliWord = storeVal;
+        }
+        if (auto vecInit = pauliWord.getDefiningOp<cudaq::cc::StdvecInitOp>()) {
           auto addrOp = vecInit.getOperand(0);
           if (auto cast = addrOp.getDefiningOp<cudaq::cc::CastOp>())
             addrOp = cast.getOperand();
           if (auto addr = addrOp.getDefiningOp<cudaq::cc::AddressOfOp>()) {
+            // Get the pauli word string from a constant global string generated
+            // during argument synthesis.
             auto globalName = addr.getGlobalName();
             auto symbol = module.lookupSymbol(globalName);
             if (auto global = dyn_cast<LLVM::GlobalOp>(symbol)) {
               auto attr = global.getValue();
               auto strAttr = cast<mlir::StringAttr>(attr.value());
               optPauliWordStr = strAttr.getValue();
+            } else if (auto global = dyn_cast<cudaq::cc::GlobalOp>(symbol)) {
+              auto attr = global.getValue();
+              auto elementsAttr = cast<mlir::ElementsAttr>(attr.value());
+              auto eleTy = elementsAttr.getElementType();
+              auto values = elementsAttr.getValues<mlir::Attribute>();
+
+              pauliWordString.reserve(values.size());
+              for (auto it = values.begin(); it != values.end(); ++it) {
+                assert(isa<IntegerType>(eleTy));
+                char v = static_cast<char>(cast<IntegerAttr>(*it).getInt());
+                pauliWordString.push_back(v);
+              }
+              optPauliWordStr = StringRef(pauliWordString);
             }
           } else if (auto lit = addrOp.getDefiningOp<
                                 cudaq::cc::CreateStringLiteralOp>()) {
+            // Get the pauli word string if it was a literal wrapped in a stdvec
+            // structure.
             optPauliWordStr = lit.getStringLiteral();
           }
         }
@@ -456,6 +506,60 @@ struct R1ToRz : public OpRewritePattern<quake::R1Op> {
     rewriter.replaceOpWithNewOp<quake::RzOp>(
         r1Op, r1Op.isAdj(), r1Op.getParameters(), r1Op.getControls(),
         r1Op.getTargets());
+    return success();
+  }
+};
+
+// Naive mapping of R1 to U3
+// quake.r1(λ) [control] target
+// ───────────────────────────────────
+// quake.u3(0, 0, λ) [control] target
+struct R1ToU3 : public OpRewritePattern<quake::R1Op> {
+  using OpRewritePattern<quake::R1Op>::OpRewritePattern;
+
+  void initialize() { setDebugName("R1ToU3"); }
+
+  LogicalResult matchAndRewrite(quake::R1Op r1Op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = r1Op->getLoc();
+    Value zero = createConstant(loc, 0.0, rewriter.getF64Type(), rewriter);
+    std::array<Value, 3> parameters = {zero, zero, r1Op.getParameters()[0]};
+    rewriter.replaceOpWithNewOp<quake::U3Op>(
+        r1Op, r1Op.isAdj(), parameters, r1Op.getControls(), r1Op.getTargets());
+    return success();
+  }
+};
+
+// quake.r1<adj> (θ) target
+// ─────────────────────────────────
+// quake.r1(-θ) target
+struct R1AdjToR1 : public OpRewritePattern<quake::R1Op> {
+  using OpRewritePattern<quake::R1Op>::OpRewritePattern;
+
+  void initialize() { setDebugName("R1AdjToR1"); }
+
+  LogicalResult matchAndRewrite(quake::R1Op op,
+                                PatternRewriter &rewriter) const override {
+    if (!op.getControls().empty())
+      return failure();
+    if (!op.isAdj())
+      return failure();
+
+    // Op info
+    Location loc = op->getLoc();
+    Value target = op.getTarget();
+    Value angle = op.getParameter();
+    angle = rewriter.create<arith::NegFOp>(loc, angle);
+
+    // Necessary/Helpful constants
+    SmallVector<Value> noControls;
+    SmallVector<Value> parameters = {angle};
+
+    QuakeOperatorCreator qRewriter(rewriter);
+    qRewriter.create<quake::R1Op>(loc, parameters, noControls, target);
+
+    qRewriter.selectWiresAndReplaceUses(op, target);
+    rewriter.eraseOp(op);
     return success();
   }
 };
@@ -1554,6 +1658,8 @@ void cudaq::populateWithAllDecompositionPatterns(RewritePatternSet &patterns) {
     CR1ToCX,
     R1ToPhasedRx,
     R1ToRz,
+    R1ToU3,
+    R1AdjToR1,
     // RxOp patterns
     CRxToCX,
     RxToPhasedRx,

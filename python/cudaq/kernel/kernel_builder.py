@@ -1,5 +1,5 @@
 # ============================================================================ #
-# Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                   #
+# Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                   #
 # All rights reserved.                                                         #
 #                                                                              #
 # This source code and the accompanying materials are made available under     #
@@ -285,6 +285,7 @@ class PyKernel(object):
                                       loc=self.loc)
             self.funcOp.attributes.__setitem__('cudaq-entrypoint',
                                                UnitAttr.get())
+            self.funcOp.attributes.__setitem__('cudaq-kernel', UnitAttr.get())
             e = self.funcOp.add_entry_block()
             self.arguments = [self.__createQuakeValue(b) for b in e.arguments]
             self.argument_count = len(self.arguments)
@@ -675,8 +676,8 @@ class PyKernel(object):
 
                 if (quake.VeqType.isinstance(inTy) and
                         quake.VeqType.isinstance(argTy)):
-                    if quake.VeqType.getSize(
-                            inTy) and not quake.VeqType.getSize(argTy):
+                    if quake.VeqType.hasSpecifiedSize(
+                            inTy) and not quake.VeqType.hasSpecifiedSize(argTy):
                         value = quake.RelaxSizeOp(argTy, value).result
 
                 mlirValues.append(value)
@@ -777,10 +778,8 @@ class PyKernel(object):
             if isinstance(initializer, cudaq_runtime.State):
                 statePtr = self.capturedDataStorage.storeCudaqState(initializer)
 
-                symName = '__nvqpp_cudaq_state_numberOfQubits'
-                load_intrinsic(self.module, symName)
                 i64Ty = self.getIntegerType()
-                numQubits = func.CallOp([i64Ty], symName, [statePtr]).result
+                numQubits = quake.GetNumberOfQubitsOp(i64Ty, statePtr).result
 
                 veqTy = quake.VeqType.get(self.ctx)
                 qubits = quake.AllocaOp(veqTy, size=numQubits).result
@@ -816,11 +815,9 @@ class PyKernel(object):
                     if cc.StateType.isinstance(valueTy):
                         statePtr = initializer.mlirValue
 
-                        symName = '__nvqpp_cudaq_state_numberOfQubits'
-                        load_intrinsic(self.module, symName)
                         i64Ty = self.getIntegerType()
-                        numQubits = func.CallOp([i64Ty], symName,
-                                                [statePtr]).result
+                        numQubits = quake.GetNumberOfQubitsOp(i64Ty,
+                                                              statePtr).result
 
                         veqTy = quake.VeqType.get(self.ctx)
                         qubits = quake.AllocaOp(veqTy, size=numQubits).result
@@ -855,7 +852,8 @@ class PyKernel(object):
             qubitsList = []
             pauliWordVal = None
             for arg in args:
-                if isinstance(arg, cudaq_runtime.SpinOperator):
+                if isinstance(arg, cudaq_runtime.SpinOperator) or hasattr(
+                        arg, "_to_spinop"):
                     if arg.get_term_count() > 1:
                         emitFatalError(
                             'exp_pauli operation requires a SpinOperator composed of a single term.'
@@ -890,7 +888,8 @@ class PyKernel(object):
                 quantumVal = quake.ConcatOp(quake.VeqType.get(
                     self.ctx), [quantumVal] if quantumVal is not None else [] +
                                             qubitsList).result
-            quake.ExpPauliOp(thetaVal, quantumVal, pauli=pauliWordVal)
+            quake.ExpPauliOp([], [thetaVal], [], [quantumVal],
+                             pauli=pauliWordVal)
 
     def givens_rotation(self, angle, qubitA, qubitB):
         """
@@ -1028,8 +1027,8 @@ class PyKernel(object):
                 return
 
             # target is a VeqType
-            size = quake.VeqType.getSize(target.mlirValue.type)
-            if size:
+            if quake.VeqType.hasSpecifiedSize(target.mlirValue.type):
+                size = quake.VeqType.getSize(target.mlirValue.type)
                 for i in range(size):
                     extracted = quake.ExtractRefOp(quake.RefType.get(self.ctx),
                                                    target.mlirValue, i).result
@@ -1078,10 +1077,12 @@ class PyKernel(object):
             if quake.VeqType.isinstance(target.mlirValue.type):
                 retTy = stdvecTy
                 measTy = cc.StdvecType.get(self.ctx, measTy)
-            res = quake.MzOp(
-                measTy, [], [target.mlirValue],
-                registerName=StringAttr.get(regName, context=self.ctx)
-                if regName is not None else '')
+            if regName is not None:
+                res = quake.MzOp(measTy, [], [target.mlirValue],
+                                 registerName=StringAttr.get(regName,
+                                                             context=self.ctx))
+            else:
+                res = quake.MzOp(measTy, [], [target.mlirValue])
             disc = quake.DiscriminateOp(retTy, res)
             return self.__createQuakeValue(disc.result)
 
@@ -1122,10 +1123,12 @@ class PyKernel(object):
             if quake.VeqType.isinstance(target.mlirValue.type):
                 retTy = stdvecTy
                 measTy = cc.StdvecType.get(self.ctx, measTy)
-            res = quake.MxOp(
-                measTy, [], [target.mlirValue],
-                registerName=StringAttr.get(regName, context=self.ctx)
-                if regName is not None else '')
+            if regName is not None:
+                res = quake.MxOp(measTy, [], [target.mlirValue],
+                                 registerName=StringAttr.get(regName,
+                                                             context=self.ctx))
+            else:
+                res = quake.MxOp(measTy, [], [target.mlirValue])
             disc = quake.DiscriminateOp(retTy, res)
             return self.__createQuakeValue(disc.result)
 
@@ -1167,10 +1170,12 @@ class PyKernel(object):
             if quake.VeqType.isinstance(target.mlirValue.type):
                 retTy = stdvecTy
                 measTy = cc.StdvecType.get(self.ctx, measTy)
-            res = quake.MyOp(
-                measTy, [], [target.mlirValue],
-                registerName=StringAttr.get(regName, context=self.ctx)
-                if regName is not None else '')
+            if regName is not None:
+                res = quake.MyOp(measTy, [], [target.mlirValue],
+                                 registerName=StringAttr.get(regName,
+                                                             context=self.ctx))
+            else:
+                res = quake.MyOp(measTy, [], [target.mlirValue])
             disc = quake.DiscriminateOp(retTy, res)
             return self.__createQuakeValue(disc.result)
 

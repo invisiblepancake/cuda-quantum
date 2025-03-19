@@ -1,5 +1,5 @@
-/*******************************************************************************
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+/****************************************************************-*- C++ -*-****
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -7,27 +7,22 @@
  ******************************************************************************/
 
 #pragma once
+
+#include "common/BraketServerHelper.h"
 #include "common/Executor.h"
 #include "common/FmtCore.h"
+#include "common/Logger.h"
 #include "common/MeasureCounts.h"
 #include "cudaq.h"
-
-#include <chrono>
-#include <iostream>
-
-#include <aws/core/Aws.h>
-
 #include <aws/braket/BraketClient.h>
-#include <aws/s3-crt/S3CrtClient.h>
-#include <aws/sts/STSClient.h>
-
+#include <aws/core/Aws.h>
 #include <aws/core/utils/logging/AWSLogging.h>
 #include <aws/core/utils/logging/ConsoleLogSystem.h>
 #include <aws/core/utils/logging/LogLevel.h>
-
-#include "common/BraketServerHelper.h"
-#include "common/Logger.h"
-
+#include <aws/s3-crt/S3CrtClient.h>
+#include <aws/sts/STSClient.h>
+#include <chrono>
+#include <iostream>
 #include <nlohmann/json.hpp>
 #include <regex>
 #include <string>
@@ -60,13 +55,18 @@ protected:
 
   std::shared_future<std::string> defaultBucketFuture;
   char const *jobToken;
+  char const *reservationArn;
 
-  std::chrono::microseconds pollingInterval = std::chrono::milliseconds{100};
+  std::chrono::microseconds pollingInterval = std::chrono::milliseconds{2000};
 
   /// @brief Utility function to check the type of ServerHelper and use it to
   /// create job
   virtual ServerJobPayload
   checkHelperAndCreateJob(std::vector<KernelExecution> &codesToExecute);
+
+  /// @brief Utility function to set the output qubits for a task.
+  void setOutputNames(const KernelExecution &codeToExecute,
+                      const std::string &taskId);
 
 public:
   BraketExecutor();
@@ -74,8 +74,8 @@ public:
   ~BraketExecutor() = default;
 
   /// @brief Execute the provided Braket task
-  details::future
-  execute(std::vector<KernelExecution> &codesToExecute) override;
+  details::future execute(std::vector<KernelExecution> &codesToExecute,
+                          bool isObserve) override;
 
   /// @brief Set the server helper
   void setServerHelper(ServerHelper *helper) override;

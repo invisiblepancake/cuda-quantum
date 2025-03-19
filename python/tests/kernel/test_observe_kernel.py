@@ -1,5 +1,5 @@
 # ============================================================================ #
-# Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                   #
+# Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                   #
 # All rights reserved.                                                         #
 #                                                                              #
 # This source code and the accompanying materials are made available under     #
@@ -302,7 +302,8 @@ def test_pack_args_pauli_list():
     def generateRandomPauliStrings(numQubits, numPaulis):
         s = ['X', 'Y', 'Z', 'I']
         return [
-            ''.join([random.choice(s) for i in range(numQubits)])
+            ''.join([random.choice(s)
+                     for i in range(numQubits)])
             for i in range(numPaulis)
         ]
 

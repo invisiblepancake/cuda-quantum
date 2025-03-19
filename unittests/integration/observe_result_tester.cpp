@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -26,7 +26,6 @@ struct deuteron_n3_ansatz {
   }
 };
 
-#ifndef CUDAQ_BACKEND_TENSORNET
 CUDAQ_TEST(ObserveResult, checkSimple) {
 
   using namespace cudaq::spin;
@@ -84,6 +83,9 @@ CUDAQ_TEST(ObserveResult, checkSimple) {
   EXPECT_TRUE(x0x1Counts.size() == 4);
 }
 
+// By default, tensornet backends only compute the overall expectation value in
+// observe, i.e., no sub-term calculations.
+#ifndef CUDAQ_BACKEND_TENSORNET
 CUDAQ_TEST(ObserveResult, checkExpValBug) {
 
   auto kernel = []() __qpu__ {

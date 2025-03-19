@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -10,12 +10,15 @@
 #include "cudaq.h"
 #include "cudaq/Support/Version.h"
 #include "cudaq/platform/orca/orca_qpu.h"
+#include "runtime/common/py_AnalogHamiltonian.h"
 #include "runtime/common/py_CustomOpRegistry.h"
+#include "runtime/common/py_EvolveResult.h"
 #include "runtime/common/py_ExecutionContext.h"
 #include "runtime/common/py_NoiseModel.h"
 #include "runtime/common/py_ObserveResult.h"
 #include "runtime/common/py_SampleResult.h"
 #include "runtime/cudaq/algorithms/py_draw.h"
+#include "runtime/cudaq/algorithms/py_evolve.h"
 #include "runtime/cudaq/algorithms/py_observe_async.h"
 #include "runtime/cudaq/algorithms/py_optimizer.h"
 #include "runtime/cudaq/algorithms/py_sample_async.h"
@@ -29,16 +32,13 @@
 #include "runtime/cudaq/spin/py_spin_op.h"
 #include "runtime/cudaq/target/py_runtime_target.h"
 #include "runtime/cudaq/target/py_testing_utils.h"
+#include "runtime/interop/PythonCppInterop.h"
 #include "runtime/mlir/py_register_dialects.h"
 #include "utils/LinkedLibraryHolder.h"
 #include "utils/OpaqueArguments.h"
-
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
-
-#include "runtime/interop/PythonCppInterop.h"
-
 #include <pybind11/complex.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
@@ -100,6 +100,8 @@ PYBIND11_MODULE(_quakeDialects, m) {
   cudaq::bindExecutionContext(cudaqRuntime);
   cudaq::bindExecutionManager(cudaqRuntime);
   cudaq::bindPyState(cudaqRuntime, *holder.get());
+  cudaq::bindPyEvolve(cudaqRuntime);
+  cudaq::bindEvolveResult(cudaqRuntime);
   cudaq::bindPyDraw(cudaqRuntime);
   cudaq::bindPyTranslate(cudaqRuntime);
   cudaq::bindSampleAsync(cudaqRuntime);
@@ -164,6 +166,14 @@ PYBIND11_MODULE(_quakeDialects, m) {
       "Returns true if MPI has already been initialized.");
   mpiSubmodule.def(
       "finalize", []() { cudaq::mpi::finalize(); }, "Finalize MPI.");
+  mpiSubmodule.def(
+      "comm_dup",
+      []() {
+        const auto [commPtr, commSize] = cudaq::mpi::comm_dup();
+        return std::make_pair(reinterpret_cast<intptr_t>(commPtr), commSize);
+      },
+      "Duplicates the communicator. Return the new communicator address (as an "
+      "integer) and its size in bytes");
 
   auto orcaSubmodule = cudaqRuntime.def_submodule("orca");
   orcaSubmodule.def(
@@ -246,6 +256,9 @@ PYBIND11_MODULE(_quakeDialects, m) {
   cudaqRuntime.def("isTerminator", [](MlirOperation op) {
     return unwrap(op)->hasTrait<mlir::OpTrait::IsTerminator>();
   });
+
+  auto ahsSubmodule = cudaqRuntime.def_submodule("ahs");
+  cudaq::bindAnalogHamiltonian(ahsSubmodule);
 
   cudaqRuntime.def(
       "isRegisteredDeviceModule",

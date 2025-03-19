@@ -1,5 +1,5 @@
 # ============================================================================ #
-# Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                   #
+# Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                   #
 # All rights reserved.                                                         #
 #                                                                              #
 # This source code and the accompanying materials are made available under     #
@@ -92,7 +92,7 @@ class PyKernelDecorator(object):
         # Register any external class types that may be used
         # in the kernel definition
         for name, var in self.globalScopedVars.items():
-            if isinstance(var, type):
+            if isinstance(var, type) and hasattr(var, '__annotations__'):
                 globalRegisteredTypes[name] = (var, var.__annotations__)
 
         # Once the kernel is compiled to MLIR, we

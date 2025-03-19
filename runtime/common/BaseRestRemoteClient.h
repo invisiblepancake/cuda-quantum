@@ -1,5 +1,5 @@
 /****************************************************************-*- C++ -*-****
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -191,8 +191,7 @@ public:
           llvm::raw_string_ostream ss(substBuff);
           ss << argCon.getSubstitutionModule();
           mlir::SmallVector<mlir::StringRef> substs = {substBuff};
-          pm.addNestedPass<mlir::func::FuncOp>(
-              opt::createArgumentSynthesisPass(kernels, substs));
+          pm.addPass(opt::createArgumentSynthesisPass(kernels, substs));
           pm.addPass(mlir::createCanonicalizerPass());
           pm.addPass(opt::createDeleteStates());
         } else if (args) {

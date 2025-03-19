@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -50,7 +50,7 @@ static bool isCodegenArgumentGather(std::size_t kind) {
 
 static bool isStateType(Type ty) {
   if (auto ptrTy = dyn_cast<cudaq::cc::PointerType>(ty))
-    return isa<cudaq::cc::StateType>(ptrTy.getElementType());
+    return isa<quake::StateType>(ptrTy.getElementType());
   return false;
 }
 

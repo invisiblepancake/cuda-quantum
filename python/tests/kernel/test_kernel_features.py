@@ -1,5 +1,5 @@
 # ============================================================================ #
-# Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                   #
+# Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                   #
 # All rights reserved.                                                         #
 #                                                                              #
 # This source code and the accompanying materials are made available under     #
@@ -185,15 +185,26 @@ def test_2grover_compute_action():
     assert '011' in counts
 
 
+def test_observe():
+
+    @cudaq.kernel
+    def ansatz():
+        q = cudaq.qvector(1)
+
+    molecule = 5.0 - 1.0 * spin.x(0)
+    res = cudaq.observe(ansatz, molecule, shots_count=10000)
+    assert np.isclose(res.expectation(), 5.0, atol=1e-1)
+
+
 def test_pauli_word_input():
 
     h2_data = [
-        3, 1, 1, 3, 0.0454063, 0, 2, 0, 0, 0, 0.17028, 0, 0, 0, 2, 0,
-        -0.220041, -0, 1, 3, 3, 1, 0.0454063, 0, 0, 0, 0, 0, -0.106477, 0, 0,
-        2, 0, 0, 0.17028, 0, 0, 0, 0, 2, -0.220041, -0, 3, 3, 1, 1, -0.0454063,
-        -0, 2, 2, 0, 0, 0.168336, 0, 2, 0, 2, 0, 0.1202, 0, 0, 2, 0, 2, 0.1202,
-        0, 2, 0, 0, 2, 0.165607, 0, 0, 2, 2, 0, 0.165607, 0, 0, 0, 2, 2,
-        0.174073, 0, 1, 1, 3, 3, -0.0454063, -0, 15
+        3, 1, 1, 3, 0.0454063, 0, 2, 0, 0, 0, 0.17028, 0, 0, 0, 2, 0, -0.220041,
+        -0, 1, 3, 3, 1, 0.0454063, 0, 0, 0, 0, 0, -0.106477, 0, 0, 2, 0, 0,
+        0.17028, 0, 0, 0, 0, 2, -0.220041, -0, 3, 3, 1, 1, -0.0454063, -0, 2, 2,
+        0, 0, 0.168336, 0, 2, 0, 2, 0, 0.1202, 0, 0, 2, 0, 2, 0.1202, 0, 2, 0,
+        0, 2, 0.165607, 0, 0, 2, 2, 0, 0.165607, 0, 0, 0, 2, 2, 0.174073, 0, 1,
+        1, 3, 3, -0.0454063, -0, 15
     ]
     h = cudaq.SpinOperator(h2_data, 4)
 
@@ -236,12 +247,12 @@ def test_pauli_word_input():
 
 def test_exp_pauli():
     h2_data = [
-        3, 1, 1, 3, 0.0454063, 0, 2, 0, 0, 0, 0.17028, 0, 0, 0, 2, 0,
-        -0.220041, -0, 1, 3, 3, 1, 0.0454063, 0, 0, 0, 0, 0, -0.106477, 0, 0,
-        2, 0, 0, 0.17028, 0, 0, 0, 0, 2, -0.220041, -0, 3, 3, 1, 1, -0.0454063,
-        -0, 2, 2, 0, 0, 0.168336, 0, 2, 0, 2, 0, 0.1202, 0, 0, 2, 0, 2, 0.1202,
-        0, 2, 0, 0, 2, 0.165607, 0, 0, 2, 2, 0, 0.165607, 0, 0, 0, 2, 2,
-        0.174073, 0, 1, 1, 3, 3, -0.0454063, -0, 15
+        3, 1, 1, 3, 0.0454063, 0, 2, 0, 0, 0, 0.17028, 0, 0, 0, 2, 0, -0.220041,
+        -0, 1, 3, 3, 1, 0.0454063, 0, 0, 0, 0, 0, -0.106477, 0, 0, 2, 0, 0,
+        0.17028, 0, 0, 0, 0, 2, -0.220041, -0, 3, 3, 1, 1, -0.0454063, -0, 2, 2,
+        0, 0, 0.168336, 0, 2, 0, 2, 0, 0.1202, 0, 0, 2, 0, 2, 0.1202, 0, 2, 0,
+        0, 2, 0.165607, 0, 0, 2, 2, 0, 0.165607, 0, 0, 0, 2, 2, 0.174073, 0, 1,
+        1, 3, 3, -0.0454063, -0, 15
     ]
     h = cudaq.SpinOperator(h2_data, 4)
 
@@ -555,6 +566,93 @@ def test_list_creation_with_cast():
     counts = cudaq.sample(kernel, list(range(5)))
     assert len(counts) == 1
     assert '1' * 5 in counts
+
+
+def test_list_boundaries():
+
+    @cudaq.kernel
+    def kernel1():
+        qubits = cudaq.qvector(2)
+        r = range(0, 0)
+        for i in r:
+            x(qubits[i])
+
+    counts = cudaq.sample(kernel1)
+    assert len(counts) == 1
+    assert '00' in counts
+
+    @cudaq.kernel
+    def kernel2():
+        qubits = cudaq.qvector(2)
+        r = range(1, 0)
+        for i in r:
+            x(qubits[i])
+
+    counts = cudaq.sample(kernel2)
+    assert len(counts) == 1
+    assert '00' in counts
+
+    @cudaq.kernel
+    def kernel3():
+        qubits = cudaq.qvector(2)
+        for i in range(-1):
+            x(qubits[i])
+
+    counts = cudaq.sample(kernel3)
+    assert len(counts) == 1
+    assert '00' in counts
+
+    @cudaq.kernel
+    def kernel4():
+        qubits = cudaq.qvector(4)
+        r = [i * 2 + 1 for i in range(1)]
+        for i in r:
+            x(qubits[i])
+
+    counts = cudaq.sample(kernel4)
+    assert len(counts) == 1
+    assert '0100' in counts
+
+    @cudaq.kernel
+    def kernel5():
+        qubits = cudaq.qvector(4)
+        r = [i * 2 + 1 for i in range(0)]
+        for i in r:
+            x(qubits[i])
+
+    counts = cudaq.sample(kernel5)
+    assert len(counts) == 1
+    assert '0000' in counts
+
+    @cudaq.kernel
+    def kernel6():
+        qubits = cudaq.qvector(4)
+        r = [i * 2 + 1 for i in range(2)]
+        for i in r:
+            x(qubits[i])
+
+    counts = cudaq.sample(kernel6)
+    assert len(counts) == 1
+    assert '0101' in counts
+
+
+def test_array_value_assignment():
+
+    @cudaq.kernel()
+    def foo():
+        a = [1, 1]
+        b = [0, 0]
+        b[0] = a[0]
+        b[1] = a[1]
+        q0 = cudaq.qubit()
+        q1 = cudaq.qubit()
+        if (b[0]):
+            x(q0)
+        if (b[1]):
+            x(q1)
+
+    counts = cudaq.sample(foo)
+    assert "11" in counts
 
 
 def test_control_operations():
@@ -1764,15 +1862,17 @@ def test_disallow_quantum_struct_return():
 
         test()
 
+
 def test_disallow_recursive_quantum_struct():
     from dataclasses import dataclass
+
     @dataclass
     class T:
         q: cudaq.qview
 
     @dataclass
     class Holder:
-        t : T
+        t: T
 
     with pytest.raises(RuntimeError) as e:
 
@@ -1783,37 +1883,41 @@ def test_disallow_recursive_quantum_struct():
             hh = Holder(t)
 
         print(test)
-    
+
     with pytest.raises(RuntimeError) as e:
 
         @cudaq.kernel
-        def test(hh : Holder):
+        def test(hh: Holder):
             pass
 
         print(test)
 
+
 def test_disallow_struct_with_methods():
     from dataclasses import dataclass
+
     @dataclass
     class T:
         q: cudaq.qview
+
         def doSomething(self):
-            pass 
+            pass
 
     with pytest.raises(RuntimeError) as e:
 
         @cudaq.kernel
-        def test(t : T):
-            pass 
+        def test(t: T):
+            pass
 
         print(test)
-    
+
     with pytest.raises(RuntimeError) as e:
 
-        @cudaq.kernel 
+        @cudaq.kernel
         def test():
             q = cudaq.qvector(2)
             t = T(q)
+
         print(test)
 
 
@@ -1920,6 +2024,43 @@ def test_numpy_functions():
 
     with pytest.raises(RuntimeError):
         cudaq.sample(invalid_unsupported)
+
+
+def test_in_comparator():
+
+    @cudaq.kernel
+    def kernel(ind: int):
+        q = cudaq.qubit()
+        if ind in [6, 13, 20, 27, 34]:
+            x(q)
+
+    c = cudaq.sample(kernel, 1)
+    assert len(c) == 1 and '0' in c
+    c = cudaq.sample(kernel, 20)
+    assert len(c) == 1 and '1' in c
+    c = cudaq.sample(kernel, 14)
+    assert len(c) == 1 and '0' in c
+    c = cudaq.sample(kernel, 13)
+    assert len(c) == 1 and '1' in c
+    c = cudaq.sample(kernel, 26)
+    assert len(c) == 1 and '0' in c
+    c = cudaq.sample(kernel, 27)
+    assert len(c) == 1 and '1' in c
+    c = cudaq.sample(kernel, 34)
+    assert len(c) == 1 and '1' in c
+    c = cudaq.sample(kernel, 36)
+    assert len(c) == 1 and '0' in c
+
+    @cudaq.kernel
+    def kernel(ind: int):
+        q = cudaq.qubit()
+        if ind not in [6, 13, 20, 27, 34]:
+            x(q)
+
+    c = cudaq.sample(kernel, 1)
+    assert len(c) == 1 and '1' in c
+    c = cudaq.sample(kernel, 20)
+    assert len(c) == 1 and '0' in c
 
 
 # leave for gdb debugging

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                  *
+ * Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                  *
  * All rights reserved.                                                        *
  *                                                                             *
  * This source code and the accompanying materials are made available under    *
@@ -31,6 +31,8 @@
 /// required here.
 
 using namespace mlir;
+
+#include "PeepholePatterns.inc"
 
 /// For a call to `__quantum__rt__qubit_allocate_array`, get the number of
 /// qubits allocated.
@@ -516,7 +518,7 @@ namespace {
 /// trivial pass only does this preparation work. It performs no analysis and
 /// does not rewrite function body's, etc.
 
-static const std::vector<std::string> measurementFunctionNames{
+static constexpr std::array<const char *, 3> measurementFunctionNames{
     cudaq::opt::QIRMeasureBody, cudaq::opt::QIRMeasure,
     cudaq::opt::QIRMeasureToRegister};
 
@@ -564,7 +566,7 @@ struct QIRProfilePreparationPass
               func.getFunctionType().getParams(), module);
 
     // Apply irreversible attribute to measurement functions
-    for (auto &funcName : measurementFunctionNames) {
+    for (auto *funcName : measurementFunctionNames) {
       Operation *op = SymbolTable::lookupSymbolIn(module, funcName);
       auto funcOp = llvm::dyn_cast_if_present<LLVM::LLVMFuncOp>(op);
       if (funcOp) {
@@ -585,14 +587,17 @@ std::unique_ptr<Pass> cudaq::opt::createQIRProfilePreparationPass() {
 //===----------------------------------------------------------------------===//
 // The various passes defined here should be added as a pass pipeline.
 
-void cudaq::opt::addQIRProfilePipeline(OpPassManager &pm,
-                                       llvm::StringRef convertTo,
-                                       bool performPrep) {
-  assert(convertTo == "qir-adaptive" || convertTo == "qir-base");
-  if (performPrep)
-    pm.addPass(createQIRProfilePreparationPass());
-  pm.addNestedPass<LLVM::LLVMFuncOp>(createConvertToQIRFuncPass(convertTo));
-  pm.addPass(createQIRToQIRProfilePass(convertTo));
+void cudaq::opt::addQIRProfileVerify(OpPassManager &pm,
+                                     llvm::StringRef convertTo) {
   VerifyQIRProfileOptions vqpo = {convertTo.str()};
   pm.addNestedPass<LLVM::LLVMFuncOp>(createVerifyQIRProfile(vqpo));
+}
+
+void cudaq::opt::addQIRProfilePipeline(OpPassManager &pm,
+                                       llvm::StringRef convertTo) {
+  assert(convertTo == "qir-adaptive" || convertTo == "qir-base");
+  pm.addPass(createQIRProfilePreparationPass());
+  pm.addNestedPass<LLVM::LLVMFuncOp>(createConvertToQIRFuncPass(convertTo));
+  pm.addPass(createQIRToQIRProfilePass(convertTo));
+  addQIRProfileVerify(pm, convertTo);
 }

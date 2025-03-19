@@ -1,5 +1,5 @@
 # ============================================================================ #
-# Copyright (c) 2022 - 2024 NVIDIA Corporation & Affiliates.                   #
+# Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                   #
 # All rights reserved.                                                         #
 #                                                                              #
 # This source code and the accompanying materials are made available under     #
@@ -92,3 +92,14 @@ def test_call_with_return_bool2():
     sample_result = cudaq.sample(run)
     counts = sample_result.get_register_counts("results")
     assert len(counts) == 4
+
+
+def test_None_annotation():
+
+    @cudaq.kernel
+    def kernel() -> None:
+        qubit = cudaq.qubit()
+        h(qubit)
+
+    # Test here is that this compiles
+    cudaq.sample(kernel)
